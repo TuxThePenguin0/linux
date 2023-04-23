@@ -2101,6 +2101,7 @@
 				<0 0>,
 				<0 0>,
 				<0 0>;
+			power-domains = <&gcc UFS_CARD_2_GDSC>;
 
 			status = "disabled";
 		};
@@ -2115,6 +2116,7 @@
 				      "ref_aux";
 			clocks = <&rpmhcc RPMH_CXO_CLK>,
 				 <&gcc GCC_UFS_PHY_PHY_AUX_CLK>;
+			power-domains = <&gcc UFS_PHY_GDSC>;
 
 			resets = <&ufs_mem_hc 0>;
 			reset-names = "ufsphy";

@@ -1,0 +1,928 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2022, The Linux Foundation. All rights reserved.
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include "sc8180x.dtsi"
+#include "sc8180x-pmics.dtsi"
+
+/ {
+	model = "Samsung Galaxy Book Go 5G";
+	compatible = "samsung,np545", "qcom,sc8180x";
+	chassis-type = "laptop";
+
+	aliases {
+		serial0 = &uart13;
+	};
+
+	chosen { };
+
+	reserved-memory {
+		// Sources for memory regions:
+		// - Windows Device Manager/ACPI
+		// - Windows Registry/driver .inf files
+
+		// Windows Registry entries:
+		//
+		// - ADSP:
+		//   - ADSP:
+		//   - alignment:    0x00100000
+		//   - reservation:  0x02200000
+		//
+		// - CDSP:
+		//   - alignment:    0x00100000
+		//   - reservation:  0x00800000
+		//
+		// - GFXSUC:
+		//   - alignment:    0x00001000
+		//   - reservation:  0x00005000
+		//
+		// - IPA (no firmware?):
+		//   - alignment:    0x00100000
+		//   - reservation:  0x00100000
+		//
+		// - MBA (bogus?):
+		//   - alignment:    0x00100000
+		//
+		// - MPSS/MODEM:
+		//   - address:      0x8d800000
+		//   - alignment:    0x00400000
+		//   - reservation:  0x03000000
+		//
+		// - SCSS/SLPI:
+		//   - alignment:    0x00100000
+		//   - reservation:  0x01400000
+		//
+		// - SPSS (no firmware?):
+		//   - alignment:    0x00100000
+		//   - reservation:  0x00100000
+		//
+		// - VENUS (bogus?):
+		//   - alignment:           0x0
+		//   - reservation:  0x00500000
+		//
+		// - WCNSS (bogus?):
+		//   - alignment:    0x00100000
+		//   - reservation:         0x0
+
+		// Windows Device Manager memory map:
+		//
+		// [...]
+		// 0x85d00000 ++   0x200000	RMTFS
+		// 0x85f00000 ++ 0x14600000	<free>
+		// 0x9a500000 ++   0x600000	QSM
+		// [...]
+
+		// Resulting memory map:
+		//
+		// [...]
+		// 0x85500000 ++  0x200000	RMTFS
+		// 0x85700000 ++ 0x6500000	<free>
+		// 0x8bc00000 ++  0x800000	WLAN
+		// 0x8c400000 ++ 0x1400000	<free>
+		// 0x8d800000 ++ 0x3000000	MPSS
+		// 0x90800000 ++ 0x2200000	ADSP
+		// 0x92a00000 ++  0x800000	CDSP
+		// 0x93200000 ++ 0x1400000	SCSS
+		// 0x94600000 ++    0x5000	GFXSUC
+		// 0x94605000 ++ 0x5efb000	<free>
+		// 0x9a500000 ++  0x600000	QSM
+		// [...]
+		/* Note: rmtfs region in ACPI/Windows starts from 0x85d00000 */
+
+		rmtfs_mem: memory@85500000 {
+			compatible = "qcom,rmtfs-mem";
+			reg = <0x0 0x85500000 0x0 0x200000>;
+			no-map;
+
+			qcom,client-id = <1>;
+			qcom,vmid = <15>;
+		};
+
+		wlan_mem: memory@8bc00000 {
+			reg = <0x0 0x8bc00000 0x0 0x800000>;
+			no-map;
+		};
+
+		mpss_mem: memory@8d800000 {
+			reg = <0x0 0x8d800000 0x0 0x3000000>;
+			no-map;
+		};
+
+		adsp_mem: memory@90800000 {
+			reg = <0x0 0x90800000 0x0 0x2200000>;
+			no-map;
+		};
+
+		cdsp_mem: memory@92a00000 {
+			reg = <0x0 0x92a00000 0x0 0x800000>;
+			no-map;
+		};
+
+		scss_mem: memory@93200000 {
+			reg = <0x0 0x93200000 0x0 0x1400000>;
+			no-map;
+		};
+
+		gfxsuc_mem: memory@94600000 {
+			reg = <0x0 0x94600000 0x0 0x5000>;
+			no-map;
+		};
+	};
+
+	pmic-glink {
+		compatible = "qcom,sc8180x-pmic-glink", "qcom,pmic-glink";
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		connector@0 {
+			compatible = "usb-c-connector";
+			reg = <0>;
+			power-role = "dual";
+			data-role = "dual";
+		};
+
+		connector@1 {
+			compatible = "usb-c-connector";
+			reg = <1>;
+			power-role = "dual";
+			data-role = "dual";
+		};
+	};
+
+	vph_pwr: vph-pwr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vph_pwr";
+		regulator-min-microvolt = <3700000>;
+		regulator-max-microvolt = <3700000>;
+	};
+
+	vreg_s4a_1p8: pm8150-s4 {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_s4a_1p8";
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+
+		regulator-always-on;
+		regulator-boot-on;
+
+		vin-supply = <&vph_pwr>;
+	};
+};
+
+&apps_rsc {
+	pmc8180-a-rpmh-regulators {
+		compatible = "qcom,pmc8180-rpmh-regulators";
+		qcom,pmic-id = "a";
+
+		vdd-s5-supply = <&vph_pwr>;
+		vdd-l1-l8-l11-supply = <&vreg_s6c_1p35>;
+		vdd-l2-l10-supply = <&vreg_bob>;
+		vdd-l3-l4-l5-l18 = <&vreg_s7c_0p95>;
+		vdd-l6-l9-supply = <&vreg_s6c_1p35>;
+		vdd-l7-l12-l14-l15-supply = <&vreg_s5a_1p95>;
+		vdd-l13-l16-l17-supply = <&vreg_bob>;
+
+		/* Failed to get the current voltage (-ENOTRECOVERABLE) */
+		vreg_s5a_1p95: smps5 {
+			//regulator-min-microvolt = <1950000>;
+			//regulator-max-microvolt = <1950000>;
+		};
+
+		/* Failed to set initial mode (-ETIMEDOUT) */
+		vreg_l1a_1p2: ldo1 {
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			//regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Failed to get the current voltage (-ENOTRECOVERABLE) */
+		/* Failed to set initial mode (-ETIMEDOUT) */
+		vreg_l2a_2p85: ldo2 {
+			//regulator-min-microvolt = <2850000>;
+			//regulator-max-microvolt = <2850000>;
+			//regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l3a: ldo3 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l5a: ldo5 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l6a_1p2: ldo6 {
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l7a_1p8: ldo7 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l9a_1p3: ldo9 {
+			regulator-min-microvolt = <1304000>;
+			regulator-max-microvolt = <1304000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Failed to set initial mode (-ETIMEDOUT) */
+		vreg_l10a_3p0: ldo10 {
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <3000000>;
+			//regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l11a: ldo11 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l12a_1p8: ldo12 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l13a: ldo13 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Failed to set initial mode (-ETIMEDOUT) */
+		vreg_l14a_1p8: ldo14 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			//regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l15a: ldo15 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l16a: ldo16 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Failed to get the current voltage (-ENOTRECOVERABLE) */
+		/* Failed to set initial mode (-ETIMEDOUT) */
+		vreg_l17a_2p85: ldo17 {
+			//regulator-min-microvolt = <2850000>;
+			//regulator-max-microvolt = <2850000>;
+			//regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l18a: ldo18 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+
+	pmc8180-e-rpmh-regulators {
+		compatible = "qcom,pmc8180-rpmh-regulators";
+		qcom,pmic-id = "e";
+
+		vdd-s4-supply = <&vph_pwr>;
+		vdd-s5-supply = <&vph_pwr>;
+		vdd-l1-l8-l11-supply = <&vreg_s4e>;
+		vdd-l2-l10-supply = <&vreg_bob>;
+		vdd-l3-l4-l5-l18-supply = <&vreg_s4e>;
+		vdd-l6-l9-supply = <&vreg_s4e>;
+		vdd-l7-l12-l14-l15-supply = <&vreg_s5e>;
+		vdd-l13-l16-l17-supply = <&vreg_bob>;
+
+		/* Voltage constraints are not in ACPI */
+		vreg_s4e: smps4 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_s5e: smps5 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l1e_0p75: ldo1 {
+			regulator-min-microvolt = <752000>;
+			regulator-max-microvolt = <752000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l2e: ldo2 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l4e: ldo4 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l5e_0p88: ldo5 {
+			regulator-min-microvolt = <880000>;
+			regulator-max-microvolt = <880000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l7e_1p8: ldo7 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l8e: ldo8 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l9e_0p88: ldo9 {
+			regulator-min-microvolt = <880000>;
+			regulator-max-microvolt = <912000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l10e_2p9: ldo10 {
+			regulator-min-microvolt = <2504000>;
+			regulator-max-microvolt = <2904000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l12e: ldo12 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l13e: ldo13 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l14e: ldo14 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l15e_1p8: ldo15 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l16e_3p0: ldo16 {
+			regulator-min-microvolt = <3072000>;
+			regulator-max-microvolt = <3072000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l17e_2p9: ldo17 {
+			regulator-min-microvolt = <2960000>;
+			regulator-max-microvolt = <2960000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+
+	pmc8180c-rpmh-regulators {
+		compatible = "qcom,pmc8180c-rpmh-regulators";
+		qcom,pmic-id = "c";
+
+		vdd-s6-supply = <&vph_pwr>;
+		vdd-s7-supply = <&vph_pwr>;
+		vdd-s8-supply = <&vph_pwr>;
+		vdd-l1-l8-supply = <&vreg_s4a_1p8>;
+		vdd-l2-l3-supply = <&vreg_s6c_1p35>;
+		vdd-l4-l5-l6-supply = <&vreg_bob>;
+		vdd-l7-l11-supply = <&vreg_bob>;
+		vdd-l9-l10 = <&vreg_bob>;
+		vdd-bob-supply = <&vph_pwr>;
+
+		/* Failed to get the current voltage (-ENOTRECOVERABLE) */
+		vreg_s6c_1p35: smps6 {
+			//regulator-min-microvolt = <1350000>;
+			//regulator-max-microvolt = <1350000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Failed to get the current voltage (-ENOTRECOVERABLE) */
+		vreg_s7c_0p95: smps7 {
+			//regulator-min-microvolt = <950000>;
+			//regulator-max-microvolt = <950000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_s8c_1p8: smps8 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l1c: ldo1 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l2c_1p2: ldo2 {
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l3c_1p2: ldo3 {
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l4c: ldo4 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l6c_2p9: ldo6 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <2950000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l7c_3p0: ldo7 {
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l8c_1p8: ldo8 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l9c_2p9: ldo9 {
+			regulator-min-microvolt = <2504000>;
+			regulator-max-microvolt = <2904000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_l10c: ldo10 {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l11c_3p3: ldo11 {
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3312000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		/* Voltage constraints are not in ACPI */
+		vreg_bob: bob {
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
+&dispcc {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+
+	zap-shader {
+		memory-region = <&gfxsuc_mem>;
+		firmware-name = "qcom/samsung/np545/qcdxkmsuc8180.mbn";
+	};
+};
+
+&i2c0 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_active>;
+
+	touchpad@40 {
+		compatible = "hid-over-i2c";
+		reg = <0x40>;
+		hid-descr-addr = <0xe>;
+
+		interrupts-extended = <&tlmm 17 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&tp_int_active_state>;
+
+		vdd-supply = <&vreg_l11c_3p3>;
+
+		wakeup-source;
+	};
+};
+
+&i2c1 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_active>;
+
+	// Samsung EC @ 0x62
+};
+
+&i2c8 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c8_active>;
+
+	keyboard@5 {
+		compatible = "hid-over-i2c";
+		reg = <0x05>;
+		hid-descr-addr = <0x20>;
+
+		interrupts-extended = <&tlmm 24 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&kb_int_active_state>;
+
+		wakeup-source;
+	};
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_edp {
+	status = "okay";
+
+	data-lanes = <0 1 2 3>;
+
+	aux-bus {
+		panel {
+			compatible = "edp-panel";
+			no-hpd;
+
+			ports {
+				port {
+					panel_in: endpoint {
+						remote-endpoint = <&mdss_edp_out>;
+					};
+				};
+			};
+		};
+	};
+
+	ports {
+		port@1 {
+			reg = <1>;
+			mdss_edp_out: endpoint {
+				remote-endpoint = <&panel_in>;
+			};
+		};
+	};
+};
+
+/*&pcie0 {
+	status = "okay";
+
+	perst-gpio = <&tlmm 35 GPIO_ACTIVE_LOW>;
+	wake-gpio = <&tlmm 37 GPIO_ACTIVE_HIGH>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_default_state>;
+};
+
+&pcie0_phy {
+	status = "okay";
+
+	vdda-phy-supply = <&vreg_l5e_0p88>;
+	vdda-pll-supply = <&vreg_l3c_1p2>;
+};*/
+
+&pcie3 {
+	status = "okay";
+
+	perst-gpio = <&tlmm 178 GPIO_ACTIVE_LOW>;
+	wake-gpio = <&tlmm 180 GPIO_ACTIVE_HIGH>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie3_default_state>;
+};
+
+&pcie3_phy {
+	status = "okay";
+
+	vdda-phy-supply = <&vreg_l5e_0p88>;
+	vdda-pll-supply = <&vreg_l3c_1p2>;
+};
+
+&pmc8180c_lpg {
+	status = "okay";
+};
+
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&qupv3_id_1 {
+	status = "okay";
+};
+
+&qupv3_id_2 {
+	status = "okay";
+};
+
+&remoteproc_adsp {
+	status = "okay";
+	memory-region = <&adsp_mem>;
+	firmware-name = "qcom/samsung/np545/qcadsp8180.mbn";
+};
+
+&remoteproc_cdsp {
+	status = "okay";
+
+	memory-region = <&cdsp_mem>;
+	firmware-name = "qcom/samsung/np545/qccdsp8180.mbn";
+};
+
+&remoteproc_mpss {
+	status = "okay";
+
+	memory-region = <&mpss_mem>;
+	firmware-name = "qcom/samsung/np545/qcmpss8180.mbn";
+};
+
+&spi3 {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi3_active>;
+};
+
+&spmi_bus {
+	pmic@2 {
+		status = "disabled";
+	};
+	pmic@a {
+		status = "disabled";
+	};
+};
+
+&tlmm {
+	i2c0_active: i2c0-active-state {
+		pins = "gpio0", "gpio1";
+		function = "qup0";
+
+		bias-pull-up;
+		drive-strength = <2>;
+	};
+
+	i2c1_active: i2c1-active-state {
+		pins = "gpio114", "gpio115";
+		function = "qup1";
+
+		bias-pull-up;
+		drive-strength = <2>;
+	};
+
+	i2c8_active: i2c8-active-state {
+		pins = "gpio88", "gpio89";
+		function = "qup8";
+
+		bias-pull-up;
+		drive-strength = <2>;
+	};
+
+	kb_int_active_state: kb-int-active-state {
+		kb-int {
+			pins = "gpio24";
+			function = "gpio";
+
+			bias-pull-up;
+			drive-strength = <2>;
+			input-enable;
+		};
+	};
+
+	pcie0_default_state: pcie0-default-state {
+		clkreq {
+			pins = "gpio36";
+			function = "pci_e0";
+
+			bias-pull-up;
+		};
+
+		reset-n {
+			pins = "gpio35";
+			function = "gpio";
+
+			bias-pull-down;
+			drive-strength = <2>;
+			output-low;
+		};
+
+		wake-n {
+			pins = "gpio37";
+			function = "gpio";
+
+			bias-pull-up;
+			drive-strength = <2>;
+		};
+	};
+
+	pcie3_default_state: pcie3-default-state {
+		clkreq {
+			pins = "gpio179";
+			function = "pci_e3";
+
+			bias-pull-up;
+		};
+
+		reset-n {
+			pins = "gpio178";
+			function = "gpio";
+
+			bias-pull-down;
+			drive-strength = <2>;
+			output-low;
+		};
+
+		wake-n {
+			pins = "gpio180";
+			function = "gpio";
+
+			bias-pull-up;
+			drive-strength = <2>;
+		};
+	};
+
+	spi3_active: spi3-active-state {
+		pins = "gpio144", "gpio145", "gpio146", "gpio147";
+		function = "qup3";
+
+		bias-disable;
+		drive-strength = <2>;
+	};
+
+	tp_int_active_state: tp-int-active-state {
+		tp-int {
+			pins = "gpio17";
+			function = "gpio";
+
+			bias-pull-up;
+			drive-strength = <2>;
+			input-enable;
+		};
+	};
+
+	uart13_state: uart13-state {
+		cts {
+			pins = "gpio43";
+			function = "qup13";
+
+			bias-pull-down;
+		};
+
+		rts-tx {
+			pins = "gpio44", "gpio45";
+			function = "qup13";
+
+			bias-disable;
+			drive-strength = <2>;
+		};
+
+		rx {
+			pins = "gpio46";
+			function = "qup13";
+
+			bias-pull-up;
+		};
+	};
+};
+
+&uart13 {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart13_state>;
+};
+
+&ufs_mem_hc {
+	status = "okay";
+
+	reset-gpios = <&tlmm 190 GPIO_ACTIVE_LOW>;
+
+	vcc-supply = <&vreg_l10e_2p9>;
+	vcc-max-microamp = <155000>;
+
+	vccq2-supply = <&vreg_l7e_1p8>;
+	vccq2-max-microamp = <425000>;
+};
+
+&ufs_mem_phy {
+	status = "okay";
+
+	vdda-phy-supply = <&vreg_l5e_0p88>;
+	vdda-pll-supply = <&vreg_l3c_1p2>;
+};
+
+&usb_mp {
+	status = "okay";
+};
+
+&usb_mp_dwc3 {
+	dr_mode = "host";
+};
+
+&usb_mp0_hsphy {
+	status = "okay";
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+	vdda18-supply = <&vreg_l12a_1p8>;
+	vdda33-supply = <&vreg_l16e_3p0>;
+};
+
+&usb_mp0_qmpphy {
+	status = "okay";
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+};
+
+&usb_mp1_hsphy {
+	status = "okay";
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+	vdda18-supply = <&vreg_l12a_1p8>;
+	vdda33-supply = <&vreg_l16e_3p0>;
+};
+
+&usb_mp1_qmpphy {
+	status = "okay";
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+};
+
+&usb_prim {
+	status = "okay";
+};
+
+&usb_prim_dwc3 {
+	dr_mode = "host";
+};
+
+&usb_prim_hsphy {
+	status = "okay";
+
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+	vdda18-supply = <&vreg_l12a_1p8>;
+	vdda33-supply = <&vreg_l16e_3p0>;
+};
+
+&usb_prim_qmpphy {
+	status = "okay";
+
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+};
+
+&usb_sec {
+	status = "okay";
+};
+
+&usb_sec_dwc3 {
+	dr_mode = "host";
+};
+
+&usb_sec_hsphy {
+	status = "okay";
+
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+	vdda18-supply = <&vreg_l12a_1p8>;
+	vdda33-supply = <&vreg_l16e_3p0>;
+};
+
+&usb_sec_qmpphy {
+	status = "okay";
+
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
+};
+
+&wifi {
+	status = "okay";
+
+	memory-region = <&wlan_mem>;
+
+	vdd-0.8-cx-mx-supply = <&vreg_l1e_0p75>;
+	vdd-1.8-xo-supply = <&vreg_l7a_1p8>;
+	vdd-1.3-rfa-supply = <&vreg_l9a_1p3>;
+	vdd-3.3-ch0-supply = <&vreg_l11c_3p3>;
+	//vdd-3.3-ch1-supply = <&vreg_l10c>; not used?
+};
