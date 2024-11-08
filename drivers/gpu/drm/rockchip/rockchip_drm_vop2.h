@@ -236,6 +236,7 @@ struct vop2_video_port_data {
 struct vop2_video_port {
 	struct drm_crtc crtc;
 	struct vop2 *vop2;
+	struct reset_control *dclk_rst;
 	struct clk *dclk;
 	struct clk *dclk_src;
 	unsigned int id;
