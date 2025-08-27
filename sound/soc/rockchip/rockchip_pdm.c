@@ -18,12 +18,14 @@
 #include "rockchip_pdm.h"
 
 #define PDM_DMA_BURST_SIZE	(8) /* size * width: 8*4 = 32 bytes */
-#define PDM_SIGNOFF_CLK_RATE	(100000000)
+#define PDM_SIGNOFF_CLK_100M	(100000000)
+#define PDM_SIGNOFF_CLK_300M	(300000000)
 #define PDM_PATH_MAX		(4)
 
 enum rk_pdm_version {
 	RK_PDM_RK3229,
 	RK_PDM_RK3308,
+	RK_PDM_RK3588,
 	RK_PDM_RV1126,
 };
 
@@ -77,7 +79,7 @@ static struct rk_pdm_ds_ratio ds_ratio[] = {
 static unsigned int get_pdm_clk(struct rk_pdm_dev *pdm, unsigned int sr,
 				unsigned int *clk_src, unsigned int *clk_out)
 {
-	unsigned int i, count, clk, div, rate;
+	unsigned int i, count, clk, div, rate, signoff = PDM_SIGNOFF_CLK_100M;
 
 	clk = 0;
 	if (!sr)
@@ -99,8 +101,11 @@ static unsigned int get_pdm_clk(struct rk_pdm_dev *pdm, unsigned int sr,
 		}
 	}
 
+	if (pdm->version == RK_PDM_RK3588)
+		signoff = PDM_SIGNOFF_CLK_300M;
+
 	if (!clk) {
-		clk = clk_round_rate(pdm->clk, PDM_SIGNOFF_CLK_RATE);
+		clk = clk_round_rate(pdm->clk, signoff);
 		*clk_src = clk;
 	}
 	return clk;
@@ -217,6 +222,7 @@ static int rockchip_pdm_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 
 	if (pdm->version == RK_PDM_RK3308 ||
+	    pdm->version == RK_PDM_RK3588 ||
 	    pdm->version == RK_PDM_RV1126) {
 		rational_best_approximation(clk_out, clk_src,
 					    GENMASK(16 - 1, 0),
@@ -246,7 +252,7 @@ static int rockchip_pdm_hw_params(struct snd_pcm_substream *substream,
 				   val);
 	}
 
-	if (pdm->version == RK_PDM_RV1126) {
+	if (pdm->version == RK_PDM_RK3588 || pdm->version == RK_PDM_RV1126) {
 		val = get_pdm_cic_ratio(clk_out);
 		regmap_update_bits(pdm->regmap, PDM_CLK_CTRL, PDM_CIC_RATIO_MSK, val);
 		val = samplerate_to_bit(samplerate);
@@ -535,6 +541,8 @@ static const struct of_device_id rockchip_pdm_match[] __maybe_unused = {
 	  .data = (void *)RK_PDM_RK3308 },
 	{ .compatible = "rockchip,rk3568-pdm",
 	  .data = (void *)RK_PDM_RV1126 },
+	{ .compatible = "rockchip,rk3588-pdm",
+	  .data = (void *)RK_PDM_RK3588 },
 	{ .compatible = "rockchip,rv1126-pdm",
 	  .data = (void *)RK_PDM_RV1126 },
 	{},
@@ -614,6 +622,9 @@ static int rockchip_pdm_probe(struct platform_device *pdev)
 	ret = clk_prepare_enable(pdm->hclk);
 	if (ret)
 		return ret;
+
+	if (pdm->version == RK_PDM_RK3588)
+		pm_runtime_forbid(&pdev->dev);
 
 	pm_runtime_enable(&pdev->dev);
 	if (!pm_runtime_enabled(&pdev->dev)) {
