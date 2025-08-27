@@ -2425,6 +2425,45 @@
 		status = "disabled";
 	};
 
+	pdm0: pdm@fe4b0000 {
+		compatible = "rockchip,rk3588-pdm";
+		reg = <0x0 0xfe4b0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 191 IRQ_TYPE_LEVEL_HIGH 0>;
+		clocks = <&cru MCLK_PDM0>, <&cru HCLK_PDM0>;
+		clock-names = "pdm_clk", "pdm_hclk";
+		dmas = <&dmac0 4>;
+		dma-names = "rx";
+		pinctrl-0 = <&pdm0m0_clk
+			     &pdm0m0_clk1
+			     &pdm0m0_sdi0
+			     &pdm0m0_sdi1
+			     &pdm0m0_sdi2
+			     &pdm0m0_sdi3>;
+		pinctrl-names = "default";
+		#sound-dai-cells = <0>;
+		status = "disabled";
+	};
+
+	pdm1: pdm@fe4c0000 {
+		compatible = "rockchip,rk3588-pdm";
+		reg = <0x0 0xfe4c0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 192 IRQ_TYPE_LEVEL_HIGH 0>;
+		clocks = <&cru MCLK_PDM1>, <&cru HCLK_PDM1>;
+		clock-names = "pdm_clk", "pdm_hclk";
+		dmas = <&dmac1 4>;
+		dma-names = "rx";
+		pinctrl-0 = <&pdm1m0_clk
+			     &pdm1m0_clk1
+			     &pdm1m0_sdi0
+			     &pdm1m0_sdi1
+			     &pdm1m0_sdi2
+			     &pdm1m0_sdi3>;
+		pinctrl-names = "default";
+		power-domains = <&power RK3588_PD_AUDIO>;
+		#sound-dai-cells = <0>;
+		status = "disabled";
+	};
+
 	spdif_tx0: spdif-tx@fe4e0000 {
 		compatible = "rockchip,rk3588-spdif", "rockchip,rk3568-spdif";
 		reg = <0x0 0xfe4e0000 0x0 0x1000>;
