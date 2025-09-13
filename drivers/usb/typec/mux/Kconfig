@@ -18,6 +18,12 @@ config TYPEC_MUX_GPIO_SBU
 	  Say Y or M if your system uses a GPIO based mux for managing the
 	  connected state and the swapping of the SBU lines in a Type-C port.
 
+config TYPEC_MUX_PI3DPX1207C
+	tristate "Pericom PI3DPX1207C Type-C retimer driver"
+	depends on I2C
+	help
+	  Say Y or M if your system has a Pericom PI3DPX1207C Type-C retimer.
+
 config TYPEC_MUX_PI3USB30532
 	tristate "Pericom PI3USB30532 Type-C cross switch driver"
 	depends on I2C
