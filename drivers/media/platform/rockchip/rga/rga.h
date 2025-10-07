@@ -169,6 +169,6 @@ static inline bool rga_has_internal_iommu(const struct rockchip_rga *rga)
 	return rga->hw->has_internal_iommu;
 }
 
-extern const struct rga_hw rga2_hw;
+extern const struct rga_hw rga2_hw, rga3_hw;
 
 #endif
