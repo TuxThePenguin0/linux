@@ -75,6 +75,7 @@ struct rockchip_rga {
 	void __iomem *regs;
 	struct clk_bulk_data clks[3];
 	struct rockchip_rga_version version;
+	struct iommu_domain *empty_domain;
 
 	/* vfd lock */
 	struct mutex mutex;
@@ -113,6 +114,12 @@ static inline struct rga_vb_buffer *vb_to_rga(struct vb2_v4l2_buffer *vb)
 }
 
 struct rga_frame *rga_get_frame(struct rga_ctx *ctx, enum v4l2_buf_type type);
+
+/*
+ * This should be called in an interrupt handler to make sure no memory
+ * is mapped through the IOMMU while the empty domain is attached.
+ */
+void rga_iommu_restore(struct rockchip_rga *rga);
 
 /* RGA Buffers Manage */
 extern const struct vb2_ops rga_qops;

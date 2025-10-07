@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/iommu.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
@@ -560,6 +561,19 @@ static const struct video_device rga_videodev = {
 	.device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING,
 };
 
+void rga_iommu_restore(struct rockchip_rga *rga)
+{
+	if (rga->empty_domain) {
+		/*
+		 * To rewrite mapping into the attached IOMMU core, attach a new empty domain that
+		 * will program an empty table, then detach it to restore the default domain and
+		 * all cached mappings.
+		 */
+		iommu_attach_device(rga->empty_domain, rga->dev);
+		iommu_detach_device(rga->empty_domain, rga->dev);
+	}
+}
+
 static int rga_parse_dt(struct rockchip_rga *rga)
 {
 	struct reset_control *core_rst, *axi_rst, *ahb_rst;
@@ -657,6 +671,13 @@ static int rga_probe(struct platform_device *pdev)
 		goto err_put_clk;
 	}
 
+	if (iommu_get_domain_for_dev(rga->dev)) {
+		rga->empty_domain = iommu_paging_domain_alloc(rga->dev);
+
+		if (!rga->empty_domain)
+			dev_warn(rga->dev, "cannot alloc new empty domain\n");
+	}
+
 	ret = v4l2_device_register(&pdev->dev, &rga->v4l2_dev);
 	if (ret)
 		goto err_put_clk;
@@ -741,6 +762,9 @@ static void rga_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&rga->v4l2_dev);
 
 	pm_runtime_disable(rga->dev);
+
+	if (rga->empty_domain)
+		iommu_domain_free(rga->empty_domain);
 }
 
 static int __maybe_unused rga_runtime_suspend(struct device *dev)
