@@ -6,6 +6,8 @@
 #ifndef __RGA_HW_H__
 #define __RGA_HW_H__
 
+#include <linux/types.h>
+
 #define RGA_CMDBUF_SIZE 0x20
 
 /* Hardware limits */
@@ -426,6 +428,16 @@ union rga_pat_con {
 		/* [24:31] */
 		unsigned int offset_y:8;
 	} data;
+};
+
+struct rga_fmt {
+	u32 fourcc;
+	int depth;
+	u8 uv_factor;
+	u8 y_div;
+	u8 x_div;
+	u8 color_swap;
+	u8 hw_format;
 };
 
 #endif

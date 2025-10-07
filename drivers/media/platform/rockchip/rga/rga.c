@@ -185,17 +185,6 @@ static int rga_setup_ctrls(struct rga_ctx *ctx)
 	return 0;
 }
 
-static struct rga_fmt *rga_fmt_find(struct rockchip_rga *rga, u32 pixelformat)
-{
-	unsigned int i;
-
-	for (i = 0; i < rga->hw->num_formats; i++) {
-		if (rga->hw->formats[i].fourcc == pixelformat)
-			return &rga->hw->formats[i];
-	}
-	return NULL;
-}
-
 struct rga_frame *rga_get_frame(struct rga_ctx *ctx, enum v4l2_buf_type type)
 {
 	if (V4L2_TYPE_IS_OUTPUT(type))
@@ -210,6 +199,7 @@ static int rga_open(struct file *file)
 	struct rockchip_rga *rga = video_drvdata(file);
 	struct rga_ctx *ctx = NULL;
 	int ret = 0;
+	u32 fourcc;
 	struct rga_frame def_frame = {
 		.width = clamp(DEFAULT_WIDTH, rga->hw->min_width, rga->hw->max_width),
 		.height = clamp(DEFAULT_HEIGHT, rga->hw->min_height, rga->hw->max_height),
@@ -218,7 +208,6 @@ static int rga_open(struct file *file)
 		.crop.top = 0,
 		.crop.width = clamp(DEFAULT_WIDTH, rga->hw->min_width, rga->hw->max_width),
 		.crop.height = clamp(DEFAULT_HEIGHT, rga->hw->min_height, rga->hw->max_height),
-		.fmt = &rga->hw->formats[0],
 	};
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
@@ -229,10 +218,14 @@ static int rga_open(struct file *file)
 	ctx->in = def_frame;
 	ctx->out = def_frame;
 
+	fourcc = 0;
+	ctx->in.fmt = rga->hw->try_format(&fourcc, true);
 	v4l2_fill_pixfmt_mp(&ctx->in.pix,
-			    ctx->in.fmt->fourcc, ctx->out.width, ctx->out.height);
+			    fourcc, ctx->out.width, ctx->out.height);
+	fourcc = 0;
+	ctx->out.fmt = rga->hw->try_format(&fourcc, false);
 	v4l2_fill_pixfmt_mp(&ctx->out.pix,
-			    ctx->out.fmt->fourcc, ctx->out.width, ctx->out.height);
+			    fourcc, ctx->out.width, ctx->out.height);
 
 	if (mutex_lock_interruptible(&rga->mutex)) {
 		kfree(ctx);
@@ -302,15 +295,8 @@ vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 static int vidioc_enum_fmt(struct file *file, void *priv, struct v4l2_fmtdesc *f)
 {
 	struct rockchip_rga *rga = video_drvdata(file);
-	struct rga_fmt *fmt;
 
-	if (f->index >= rga->hw->num_formats)
-		return -EINVAL;
-
-	fmt = &rga->hw->formats[f->index];
-	f->pixelformat = fmt->fourcc;
-
-	return 0;
+	return rga->hw->enum_format(f);
 }
 
 static void align_pixfmt(struct v4l2_pix_format_mplane *pix_fmt)
@@ -346,7 +332,7 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	if (IS_ERR(frm))
 		return PTR_ERR(frm);
 
-	v4l2_fill_pixfmt_mp(pix_fmt, frm->fmt->fourcc, frm->width, frm->height);
+	v4l2_fill_pixfmt_mp(pix_fmt, frm->pix.pixelformat, frm->width, frm->height);
 	align_pixfmt(pix_fmt);
 
 	pix_fmt->field = V4L2_FIELD_NONE;
@@ -360,18 +346,16 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	struct v4l2_pix_format_mplane *pix_fmt = &f->fmt.pix_mp;
 	struct rockchip_rga *rga = video_drvdata(file);
 	const struct rga_hw *hw = rga->hw;
-	struct rga_fmt *fmt;
 
-	fmt = rga_fmt_find(rga, pix_fmt->pixelformat);
-	if (!fmt)
-		fmt = &hw->formats[0];
+	hw->try_format(&pix_fmt->pixelformat,
+		       V4L2_TYPE_IS_OUTPUT(f->type));
 
 	pix_fmt->width = clamp(pix_fmt->width,
 			       hw->min_width, hw->max_width);
 	pix_fmt->height = clamp(pix_fmt->height,
 				hw->min_height, hw->max_height);
 
-	v4l2_fill_pixfmt_mp(pix_fmt, fmt->fourcc, pix_fmt->width, pix_fmt->height);
+	v4l2_fill_pixfmt_mp(pix_fmt, pix_fmt->pixelformat, pix_fmt->width, pix_fmt->height);
 	align_pixfmt(pix_fmt);
 	pix_fmt->field = V4L2_FIELD_NONE;
 
@@ -404,7 +388,8 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		return PTR_ERR(frm);
 	frm->width = pix_fmt->width;
 	frm->height = pix_fmt->height;
-	frm->fmt = rga_fmt_find(rga, pix_fmt->pixelformat);
+	frm->fmt = rga->hw->try_format(&pix_fmt->pixelformat,
+				       V4L2_TYPE_IS_OUTPUT(f->type));
 	frm->colorspace = pix_fmt->colorspace;
 
 	/* Reset crop settings */
@@ -418,7 +403,7 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	v4l2_dbg(debug, 1, &rga->v4l2_dev,
 		 "[%s] fmt - %p4cc %dx%d (stride %d)\n",
 		  V4L2_TYPE_IS_OUTPUT(f->type) ? "OUTPUT" : "CAPTURE",
-		  &frm->fmt->fourcc, frm->width, frm->height,
+		  &pix_fmt->pixelformat, frm->width, frm->height,
 		  pix_fmt->plane_fmt[0].bytesperline);
 
 	for (i = 0; i < pix_fmt->num_planes; i++) {
