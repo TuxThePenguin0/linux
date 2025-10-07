@@ -459,6 +459,25 @@ static int vidioc_enum_fmt(struct file *file, void *priv, struct v4l2_fmtdesc *f
 	return 0;
 }
 
+static void align_pixfmt(struct v4l2_pix_format_mplane *pix_fmt)
+{
+	int lines;
+	struct v4l2_plane_pix_format *fmt;
+
+	/*
+	 * Align stride to 16 for the RGA3 (based on the datasheet)
+	 * To not dismiss the v4l2_fill_pixfmt_mp helper
+	 * (and manually write it again), we're approximating the new sizeimage
+	 */
+	for (fmt = pix_fmt->plane_fmt;
+	     fmt < pix_fmt->plane_fmt + pix_fmt->num_planes;
+	     fmt++) {
+		lines = DIV_ROUND_UP(fmt->sizeimage, fmt->bytesperline);
+		fmt->bytesperline = (fmt->bytesperline + 0xf) & ~0xf;
+		fmt->sizeimage = fmt->bytesperline * lines;
+	}
+}
+
 static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 {
 	struct v4l2_pix_format_mplane *pix_fmt = &f->fmt.pix_mp;
@@ -474,6 +493,7 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		return PTR_ERR(frm);
 
 	v4l2_fill_pixfmt_mp(pix_fmt, frm->fmt->fourcc, frm->width, frm->height);
+	align_pixfmt(pix_fmt);
 
 	pix_fmt->field = V4L2_FIELD_NONE;
 	pix_fmt->colorspace = frm->colorspace;
@@ -496,6 +516,7 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 				(u32)MIN_HEIGHT, (u32)MAX_HEIGHT);
 
 	v4l2_fill_pixfmt_mp(pix_fmt, fmt->fourcc, pix_fmt->width, pix_fmt->height);
+	align_pixfmt(pix_fmt);
 	pix_fmt->field = V4L2_FIELD_NONE;
 
 	return 0;
