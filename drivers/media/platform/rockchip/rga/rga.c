@@ -56,29 +56,37 @@ static void device_run(void *prv)
 static irqreturn_t rga_isr(int irq, void *prv)
 {
 	struct rockchip_rga *rga = prv;
+	struct vb2_v4l2_buffer *src, *dst;
+	struct rga_ctx *ctx = rga->curr;
+	enum rga_irq_result result;
 
-	if (rga->hw->handle_irq(rga)) {
-		struct vb2_v4l2_buffer *src, *dst;
-		struct rga_ctx *ctx = rga->curr;
+	result = rga->hw->handle_irq(rga);
+	if (result == RGA_IRQ_IGNORE)
+		return IRQ_HANDLED;
 
-		WARN_ON(!ctx);
+	WARN_ON(!ctx);
 
-		rga->curr = NULL;
+	rga->curr = NULL;
 
-		src = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
-		dst = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
+	src = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
+	dst = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
 
-		WARN_ON(!src);
-		WARN_ON(!dst);
+	WARN_ON(!src);
+	WARN_ON(!dst);
 
-		v4l2_m2m_buf_copy_metadata(src, dst, true);
+	v4l2_m2m_buf_copy_metadata(src, dst, true);
 
-		dst->sequence = ctx->csequence++;
+	dst->sequence = ctx->csequence++;
 
+	if (result == RGA_IRQ_DONE) {
 		v4l2_m2m_buf_done(src, VB2_BUF_STATE_DONE);
 		v4l2_m2m_buf_done(dst, VB2_BUF_STATE_DONE);
-		v4l2_m2m_job_finish(rga->m2m_dev, ctx->fh.m2m_ctx);
+	} else {
+		v4l2_m2m_buf_done(src, VB2_BUF_STATE_ERROR);
+		v4l2_m2m_buf_done(dst, VB2_BUF_STATE_ERROR);
 	}
+
+	v4l2_m2m_job_finish(rga->m2m_dev, ctx->fh.m2m_ctx);
 
 	return IRQ_HANDLED;
 }

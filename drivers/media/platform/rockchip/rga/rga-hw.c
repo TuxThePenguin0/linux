@@ -459,7 +459,7 @@ static void rga_hw_start(struct rockchip_rga *rga,
 	rga_write(rga, RGA_CMD_CTRL, 0x1);
 }
 
-static bool rga_handle_irq(struct rockchip_rga *rga)
+static enum rga_irq_result rga_handle_irq(struct rockchip_rga *rga)
 {
 	int intr;
 
@@ -467,7 +467,9 @@ static bool rga_handle_irq(struct rockchip_rga *rga)
 
 	rga_mod(rga, RGA_INT, intr << 4, 0xf << 4);
 
-	return intr & 0x04;
+	if (intr & 0x04)
+		return RGA_IRQ_DONE;
+	return RGA_IRQ_IGNORE;
 }
 
 static void rga_get_version(struct rockchip_rga *rga)

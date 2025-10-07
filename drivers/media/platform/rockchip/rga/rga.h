@@ -143,6 +143,12 @@ static inline void rga_mod(struct rockchip_rga *rga, u32 reg, u32 val, u32 mask)
 	rga_write(rga, reg, temp);
 };
 
+enum rga_irq_result {
+	RGA_IRQ_IGNORE,
+	RGA_IRQ_DONE,
+	RGA_IRQ_ERROR,
+};
+
 struct rga_hw {
 	const char *card_type;
 	bool has_internal_iommu;
@@ -152,7 +158,7 @@ struct rga_hw {
 
 	void (*start)(struct rockchip_rga *rga,
 		      struct rga_vb_buffer *src, struct rga_vb_buffer *dst);
-	bool (*handle_irq)(struct rockchip_rga *rga);
+	enum rga_irq_result (*handle_irq)(struct rockchip_rga *rga);
 	void (*get_version)(struct rockchip_rga *rga);
 	void *(*try_format)(u32 *fourcc, bool is_output);
 	int (*enum_format)(struct v4l2_fmtdesc *f);
