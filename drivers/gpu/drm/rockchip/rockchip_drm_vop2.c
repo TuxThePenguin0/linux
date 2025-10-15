@@ -1069,9 +1069,16 @@ static int vop2_plane_atomic_check(struct drm_plane *plane,
 	 * This is workaround solution for IC design:
 	 * esmart can't support scale down when src_w % 16 == 1.
 	 */
-	if (!vop2_cluster_window(win) && src_w > dsp_w && (src_w & 1)) {
+	if (!vop2_cluster_window(win) && src_w > dest_w && (src_w & 1)) {
 		drm_dbg_kms(vop2->drm,
 			    "eSmart windows cannot downscale odd-width source regions\n");
+		return -EINVAL;
+	}
+
+	if (drm_is_afbc(fb->modifier) && src_w % 4) {
+		drm_dbg_kms(vop2->drm,
+			    "AFBC source rectangles must be 4-byte aligned; is %d\n",
+			    src_w);
 		return -EINVAL;
 	}
 
@@ -1235,11 +1242,8 @@ static void vop2_plane_atomic_update(struct drm_plane *plane,
 	WARN_ON(src_w < 4);
 	WARN_ON(src_h < 4);
 
-	if (afbc_en && src_w % 4) {
-		drm_dbg_kms(vop2->drm, "vp%d %s src_w[%d] not 4 pixel aligned\n",
-			    vp->id, win->data->name, src_w);
-		src_w = ALIGN_DOWN(src_w, 4);
-	}
+	if (drm_is_afbc(fb->modifier))
+		WARN_ON(src_w % 4);
 
 	act_info = (src_h - 1) << 16 | ((src_w - 1) & 0xffff);
 	dsp_info = (dsp_h - 1) << 16 | ((dsp_w - 1) & 0xffff);
