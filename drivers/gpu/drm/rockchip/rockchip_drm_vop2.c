@@ -1030,8 +1030,8 @@ static int vop2_plane_atomic_check(struct drm_plane *plane,
 		return 0;
 
 	format = vop2_convert_format(fb->format->format);
-	if (format < 0)
-		return format;
+	/* We shouldn't be able to create a fb for an unsupported format */
+	WARN_ON(format < 0);
 
 	/* Co-ordinates have now been clipped */
 	src_x = src->x1 >> 16;
