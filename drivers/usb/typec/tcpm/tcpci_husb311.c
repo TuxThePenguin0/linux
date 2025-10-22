@@ -98,6 +98,17 @@ static int husb311_tcpc_set_vbus(struct tcpci *tcpci, struct tcpci_data *tdata,
 	return 0;
 }
 
+static int husb311_tcpc_set_source_current_limit(struct tcpci *tcpci, struct tcpci_data *tdata, u32 max_ma, u32 mv)
+{
+	struct husb311_chip *c = tdata_to_husb311(tdata);
+	int ret;
+
+	ret = regulator_set_current_limit(c->vbus, max_ma * 1000, max_ma * 1000);
+	if (ret)
+		return ret;
+	return regulator_set_voltage(c->vbus, mv * 1000, mv * 1000);
+}
+
 static irqreturn_t husb311_irq(int irq, void *dev_id)
 {
 	struct husb311_chip *chip = dev_id;
@@ -170,6 +181,7 @@ static int husb311_probe(struct i2c_client *client)
 			return PTR_ERR(chip->vbus);
 	} else {
 		chip->data.set_vbus = husb311_tcpc_set_vbus;
+		chip->data.set_source_current_limit = husb311_tcpc_set_source_current_limit;
 	}
 
 	chip->tcpci = tcpci_register_port(chip->dev, &chip->data);
