@@ -392,6 +392,8 @@ struct tcpm_port {
 	bool vbus_never_low;
 	bool vbus_source;
 	bool vbus_charge;
+	int vbus_current;
+	int vbus_voltage;
 
 	/* Set to true when Discover_Identity Command is expected to be sent in Ready states. */
 	bool send_discover;
@@ -3916,6 +3918,9 @@ static int tcpm_pd_check_request(struct tcpm_port *port)
 	unsigned int max, op, pdo_max, index;
 	enum pd_pdo_type type;
 
+	port->vbus_voltage = 5000;
+	port->vbus_current = 3000;
+
 	index = rdo_index(rdo);
 	if (!index || index > port->nr_src_pdo)
 		return -EINVAL;
@@ -3934,15 +3939,19 @@ static int tcpm_pd_check_request(struct tcpm_port *port)
 		if (max > pdo_max && !(rdo & RDO_CAP_MISMATCH))
 			return -EINVAL;
 
-		if (type == PDO_TYPE_FIXED)
+		if (type == PDO_TYPE_FIXED) {
 			tcpm_log(port,
 				 "Requested %u mV, %u mA for %u / %u mA",
 				 pdo_fixed_voltage(pdo), pdo_max, op, max);
-		else
+			port->vbus_voltage = pdo_fixed_voltage(pdo);
+		} else {
 			tcpm_log(port,
 				 "Requested %u -> %u mV, %u mA for %u / %u mA",
 				 pdo_min_voltage(pdo), pdo_max_voltage(pdo),
 				 pdo_max, op, max);
+			port->vbus_voltage = pdo_max_voltage(pdo);
+		}
+		port->vbus_current = max;
 		break;
 	case PDO_TYPE_BATT:
 		max = rdo_max_power(rdo);
@@ -4305,6 +4314,18 @@ static int tcpm_pd_send_pps_request(struct tcpm_port *port)
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
 }
 
+static int tcpm_set_source_current(struct tcpm_port *port, u32 max_ma, u32 mv)
+{
+	int ret = 0;
+
+	tcpm_log(port, "vbus %u mV, %u mA", mv, max_ma);
+
+	if (port->tcpc->set_source_current_limit)
+		ret = port->tcpc->set_source_current_limit(port->tcpc, max_ma, mv);
+
+	return ret;
+}
+
 static int tcpm_set_vbus(struct tcpm_port *port, bool enable)
 {
 	int ret;
@@ -4313,6 +4334,10 @@ static int tcpm_set_vbus(struct tcpm_port *port, bool enable)
 		return -EINVAL;
 
 	tcpm_log(port, "vbus:=%d charge=%d", enable, port->vbus_charge);
+
+	ret = tcpm_set_source_current(port, 3000, 5000);
+	if (ret < 0)
+		return ret;
 
 	ret = port->tcpc->set_vbus(port->tcpc, enable, port->vbus_charge);
 	if (ret < 0)
@@ -4331,6 +4356,10 @@ static int tcpm_set_charge(struct tcpm_port *port, bool charge)
 
 	if (charge != port->vbus_charge) {
 		tcpm_log(port, "vbus=%d charge:=%d", port->vbus_source, charge);
+		ret = tcpm_set_source_current(port, 3000, 5000);
+		if (ret < 0)
+			return ret;
+
 		ret = port->tcpc->set_vbus(port->tcpc, port->vbus_source,
 					   charge);
 		if (ret < 0)
@@ -4356,6 +4385,10 @@ static bool tcpm_start_toggling(struct tcpm_port *port, enum typec_cc_status cc)
 static int tcpm_init_vbus(struct tcpm_port *port)
 {
 	int ret;
+
+	ret = tcpm_set_source_current(port, 3000, 5000);
+	if (ret < 0)
+		return ret;
 
 	ret = port->tcpc->set_vbus(port->tcpc, false, false);
 	port->vbus_source = false;
@@ -4963,7 +4996,7 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 		break;
 	case SRC_TRANSITION_SUPPLY:
-		/* XXX: regulator_set_voltage(vbus, ...) */
+		tcpm_set_source_current(port, port->vbus_current, port->vbus_voltage);
 		tcpm_pd_send_control(port, PD_CTRL_PS_RDY, TCPC_TX_SOP);
 		port->explicit_contract = true;
 		typec_set_pwr_opmode(port->typec_port, TYPEC_PWR_MODE_PD);

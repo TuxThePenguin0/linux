@@ -76,6 +76,9 @@ enum tcpm_transmit_type {
  * @set_current_limit:
  *		Optional; called to set current limit as negotiated
  *		with partner.
+ * @set_source_current_limit:
+ *		Optional; called to set source current limit as negotiated with
+ *		partner.
  * @set_pd_rx:	Called to enable or disable reception of PD messages
  * @set_roles:	Called to set power and data roles
  * @start_toggling:
@@ -149,6 +152,7 @@ struct tcpc_dev {
 	int (*set_vconn)(struct tcpc_dev *dev, bool on);
 	int (*set_vbus)(struct tcpc_dev *dev, bool on, bool charge);
 	int (*set_current_limit)(struct tcpc_dev *dev, u32 max_ma, u32 mv);
+	int (*set_source_current_limit)(struct tcpc_dev *dev, u32 max_ma, u32 mv);
 	int (*set_pd_rx)(struct tcpc_dev *dev, bool on);
 	int (*set_roles)(struct tcpc_dev *dev, bool attached,
 			 enum typec_role role, enum typec_data_role data);
