@@ -563,6 +563,16 @@ static int tcpci_set_vbus(struct tcpc_dev *tcpc, bool source, bool sink)
 	return 0;
 }
 
+static int tcpci_set_source_current_limit(struct tcpc_dev *tcpc, u32 max_ma, u32 mv)
+{
+	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
+
+	if (tcpci->data->set_source_current_limit)
+		return tcpci->data->set_source_current_limit(tcpci, tcpci->data, max_ma, mv);
+
+	return 0;
+}
+
 static int tcpci_pd_transmit(struct tcpc_dev *tcpc, enum tcpm_transmit_type type,
 			     const struct pd_message *msg, unsigned int negotiated_rev)
 {
@@ -845,6 +855,7 @@ struct tcpci *tcpci_register_port(struct device *dev, struct tcpci_data *data)
 	tcpci->tcpc.init = tcpci_init;
 	tcpci->tcpc.get_vbus = tcpci_get_vbus;
 	tcpci->tcpc.set_vbus = tcpci_set_vbus;
+	tcpci->tcpc.set_source_current_limit = tcpci_set_source_current_limit;
 	tcpci->tcpc.set_cc = tcpci_set_cc;
 	tcpci->tcpc.apply_rc = tcpci_apply_rc;
 	tcpci->tcpc.get_cc = tcpci_get_cc;
