@@ -2641,6 +2641,7 @@ static int vop2_bind(struct device *dev, struct device *master, void *data)
 	struct drm_device *drm = data;
 	struct vop2 *vop2;
 	struct resource *res;
+	struct reset_control *aclk_rst;
 	size_t alloc_size;
 	int ret;
 
@@ -2749,6 +2750,19 @@ static int vop2_bind(struct device *dev, struct device *master, void *data)
 	vop2->irq = platform_get_irq(pdev, 0);
 	if (vop2->irq < 0)
 		return dev_err_probe(drm->dev, vop2->irq, "cannot find irq for vop2\n");
+
+	/*
+	 * do aclk reset, reset all vop registers.
+	 */
+	aclk_rst = devm_reset_control_get(vop2->dev, "aclk");
+	if (IS_ERR(aclk_rst)) {
+		DRM_DEV_ERROR(vop2->dev, "failed to get aclk reset\n");
+		ret = PTR_ERR(aclk_rst);
+		return ret;
+	}
+	reset_control_assert(aclk_rst);
+	usleep_range(10, 20);
+	reset_control_deassert(aclk_rst);
 
 	mutex_init(&vop2->vop2_lock);
 	mutex_init(&vop2->ovl_lock);
