@@ -1215,9 +1215,16 @@ int dw_pcie_resume_noirq(struct dw_pcie *pci)
 	if (ret)
 		return ret;
 
-	ret = dw_pcie_wait_for_link(pci);
-	if (ret)
-		return ret;
+	/*
+	 * Note: Skip the link up delay only when a Link Up IRQ is present.
+	 * If there is no Link Up IRQ, we should not bypass the delay
+	 * because that would require users to manually rescan for devices.
+	 */
+	if (!pci->pp.use_linkup_irq) {
+		ret = dw_pcie_wait_for_link(pci);
+		if (ret)
+			return ret;
+	}
 
 	return ret;
 }
