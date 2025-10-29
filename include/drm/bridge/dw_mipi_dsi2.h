@@ -223,6 +223,7 @@ struct dw_mipi_dsi2 {
 	struct drm_bridge bridge;
 	struct mipi_dsi_host dsi_host;
 	struct drm_bridge *panel_bridge;
+	struct drm_dsc_config *dsc;
 	struct device *dev;
 	struct regmap *regmap;
 	struct clk *pclk;

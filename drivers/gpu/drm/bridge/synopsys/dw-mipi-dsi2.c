@@ -20,6 +20,7 @@
 #include <video/mipi_display.h>
 
 #include <drm/bridge/dw_mipi_dsi2.h>
+#include <drm/display/drm_dsc.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_mipi_dsi.h>
@@ -183,7 +184,10 @@ static void dw_mipi_dsi2_phy_ratio_cfg(struct dw_mipi_dsi2 *dsi2)
 
 	/* IPI_RATIO_MAN_CFG = PHY_HSTX_CLK / IPI_CLK */
 	pixel_clk = mode->crtc_clock * MSEC_PER_SEC;
-	ipi_clk = pixel_clk / 4;
+	if (dsi2->dsc)
+		ipi_clk = pixel_clk / (dsi2->dsc->slice_count == 1 ? 8 : 16);
+	else
+		ipi_clk = pixel_clk / 4;
 
 	tmp = DIV_ROUND_CLOSEST_ULL(phy_hsclk << 16, ipi_clk);
 	regmap_write(dsi2->regmap, DSI2_PHY_IPI_RATIO_MAN_CFG,
@@ -278,7 +282,7 @@ static void dw_mipi_dsi2_ipi_color_coding_cfg(struct dw_mipi_dsi2 *dsi2)
 	}
 
 	val = IPI_DEPTH(color_depth) |
-	      IPI_FORMAT(IPI_FORMAT_RGB);
+	      IPI_FORMAT(dsi2->dsc ? IPI_FORMAT_DSC : IPI_FORMAT_RGB);
 	regmap_write(dsi2->regmap, DSI2_IPI_COLOR_MAN_CFG, val);
 }
 
@@ -376,6 +380,7 @@ static int dw_mipi_dsi2_host_attach(struct mipi_dsi_host *host,
 	dsi2->channel = device->channel;
 	dsi2->format = device->format;
 	dsi2->mode_flags = device->mode_flags;
+	dsi2->dsc = device->dsc;
 
 	bridge = devm_drm_of_get_bridge(dsi2->dev, dsi2->dev->of_node, 1, 0);
 	if (IS_ERR(bridge))
