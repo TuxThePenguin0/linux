@@ -20,6 +20,7 @@
 #include <linux/reset.h>
 #include <linux/swab.h>
 
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/drm.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_uapi.h>
@@ -780,7 +781,8 @@ static void rk3588_vop2_power_domain_enable_all(struct vop2 *vop2)
 
 	pd = vop2_readl(vop2, RK3588_SYS_PD_CTRL);
 	pd &= ~(VOP2_PD_CLUSTER0 | VOP2_PD_CLUSTER1 | VOP2_PD_CLUSTER2 |
-		VOP2_PD_CLUSTER3 | VOP2_PD_ESMART);
+		VOP2_PD_CLUSTER3 | VOP2_PD_DSC_8K | VOP2_PD_DSC_4K |
+		VOP2_PD_ESMART);
 
 	vop2_writel(vop2, RK3588_SYS_PD_CTRL, pd);
 }
@@ -922,11 +924,31 @@ static bool vop2_gamma_lut_in_use(struct vop2 *vop2, struct vop2_video_port *vp)
 	return gamma_en_vp_id != nr_vps && gamma_en_vp_id != vp->id;
 }
 
+static void vop2_crtc_disable_dsc(struct vop2 *vop2, u8 dsc_id)
+{
+	u32 ctrl_base = dsc_id ? RK3588_DSC_SYS_CTRL_4K_BASE :
+				 RK3588_DSC_SYS_CTRL_8K_BASE;
+	u32 dsc_base = dsc_id ? RK3588_DSC_4K_BASE : RK3588_DSC_8K_BASE;
+
+	regmap_update_bits(vop2->map, dsc_base + RK3588_DSC_CTRL0,
+			   RK3588_DSC_CTRL0__MER, RK3588_DSC_CTRL0__MER);
+
+	regmap_update_bits(vop2->map, ctrl_base + RK3588_DSC_SYS_CTRL,
+			   RK3588_DSC_SYS_CTRL__DSC_INFACE_MODE, 0);
+
+	regmap_update_bits(vop2->map, dsc_base + RK3588_DSC_CTRL0,
+			   RK3588_DSC_CTRL0__EN, 0);
+
+	regmap_update_bits(vop2->map, ctrl_base + RK3588_DSC_RST,
+			   RK3588_DSC_RST__DSC_SOFT_RST, 0);
+}
+
 static void vop2_crtc_atomic_disable(struct drm_crtc *crtc,
 				     struct drm_atomic_state *state)
 {
 	struct vop2_video_port *vp = to_vop2_video_port(crtc);
 	struct vop2 *vop2 = vp->vop2;
+	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(crtc->state);
 	struct drm_crtc_state *old_crtc_state;
 	int ret;
 
@@ -936,6 +958,9 @@ static void vop2_crtc_atomic_disable(struct drm_crtc *crtc,
 	drm_atomic_helper_disable_planes_on_crtc(old_crtc_state, false);
 
 	drm_crtc_vblank_off(crtc);
+
+	if (vcstate->dsc)
+		vop2_crtc_disable_dsc(vop2, vcstate->dsc_id);
 
 	/*
 	 * Vop standby will take effect at end of current frame,
@@ -1592,6 +1617,160 @@ static void vop2_post_config(struct drm_crtc *crtc)
 	vop2_vp_write(vp, RK3568_VP_DSP_BG, val);
 }
 
+static int vop2_populate_dsc_params(struct drm_crtc *crtc)
+{
+	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(crtc->state);
+	struct drm_dsc_config *dsc = vcstate->dsc;
+	struct drm_display_mode *mode = &crtc->state->adjusted_mode;
+	int ret;
+
+	dsc->pic_width = mode->hdisplay;
+	dsc->pic_height = mode->vdisplay;
+
+	dsc->simple_422 = false;
+	dsc->convert_rgb = true;
+	dsc->vbr_enable = false;
+
+	drm_dsc_set_const_params(dsc);
+	drm_dsc_set_rc_buf_thresh(dsc);
+
+	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (ret)
+		return ret;
+
+	dsc->initial_scale_value = drm_dsc_initial_scale_value(dsc);
+	dsc->line_buf_depth = dsc->bits_per_component + 1;
+
+	return drm_dsc_compute_rc_parameters(dsc);
+}
+
+static void vop2_crtc_load_pps(struct drm_crtc *crtc, u8 dsc_id)
+{
+	struct vop2_video_port *vp = to_vop2_video_port(crtc);
+	struct vop2 *vop2 = vp->vop2;
+	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(crtc->state);
+	u32 dsc_base = dsc_id ? RK3588_DSC_4K_BASE : RK3588_DSC_8K_BASE;
+	struct drm_dsc_picture_parameter_set pps;
+	int i;
+
+	drm_dsc_pps_payload_pack(&pps, vcstate->dsc);
+
+	if ((pps.pps_3 & 0xf) > 11) {
+		drm_warn(vop2->drm,
+			 "DSC max_linebuf_depth %d too long, current set value is 11\n",
+			 pps.pps_3 & 0xf);
+		pps.pps_3 &= 0xf0;
+		pps.pps_3 |= 11;
+	}
+
+	for (i = 0; i < DSC_NUM_BUF_RANGES; i++) {
+		pps.rc_range_parameters[i] =
+			(pps.rc_range_parameters[i] >> 3 & 0x1f) |
+			((pps.rc_range_parameters[i] >> 14 & 0x3) << 5) |
+			((pps.rc_range_parameters[i] >> 0 & 0x7) << 7) |
+			((pps.rc_range_parameters[i] >> 8 & 0x3f) << 10);
+	}
+
+	for (i = 0; i < 22; i++)
+		vop2_writel(vop2, dsc_base + RK3588_DSC_PPS_BASE + (i * 4),
+			    ((u32*)(&pps))[i]);
+}
+
+static void vop2_crtc_enable_dsc(struct drm_crtc *crtc, u8 dsc_id)
+{
+	struct vop2_video_port *vp = to_vop2_video_port(crtc);
+	struct vop2 *vop2 = vp->vop2;
+	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(crtc->state);
+	struct drm_display_mode *mode = &crtc->state->adjusted_mode;
+	struct drm_dsc_config *dsc = vcstate->dsc;
+	u16 hsync_len = mode->crtc_hsync_end - mode->crtc_hsync_start;
+	u16 hdisplay = mode->crtc_hdisplay;
+	u16 htotal = mode->crtc_htotal;
+	u16 hact_st = mode->crtc_htotal - mode->crtc_hsync_start;
+	u16 vdisplay = mode->crtc_vdisplay;
+	u16 vtotal = mode->crtc_vtotal;
+	u16 vsync_len = mode->crtc_vsync_end - mode->crtc_vsync_start;
+	u16 vact_st = mode->crtc_vtotal - mode->crtc_vsync_start;
+	u16 vact_end = vact_st + vdisplay;
+	int dsc_buf_size = dsc_id == 0 ? 4320 * 8 : 9216 * 2;
+	int delay_line_num, txp_clk_div, cds_clk_div;
+	int dsc_htotal, dsc_hsync_len, dsc_hact_end, dsc_hact_st;
+	u32 ctrl_base = dsc_id ? RK3588_DSC_SYS_CTRL_4K_BASE :
+				 RK3588_DSC_SYS_CTRL_8K_BASE;
+	u32 dsc_base = dsc_id ? RK3588_DSC_4K_BASE : RK3588_DSC_8K_BASE;
+	u32 val;
+
+	vop2_populate_dsc_params(crtc);
+
+	/* Does not support ganged mode */
+	/* Only supports DSI video mode */
+
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_INIT_DLY_NUM,
+		    RK3588_DSC_INIT_DLY_NUM__SCAN_TIMING_PARA_IMD);
+
+	txp_clk_div = dsc->slice_count;
+	cds_clk_div = (dsc->slice_count == 1 ? 4 : 8) / txp_clk_div;
+	val = FIELD_PREP(RK3588_DSC_SYS_CTRL__DSC_PORT_SEL, vp->id);
+	val |= FIELD_PREP(RK3588_DSC_SYS_CTRL__DSC_INFACE_MODE, 3);
+	val |= FIELD_PREP(RK3588_DSC_SYS_CTRL__DSC_PIXEL_NUM,
+			  dsc->slice_count >> 1);
+	val |= FIELD_PREP(RK3588_DSC_SYS_CTRL__DSC_TXP_CLK_DIV,
+			  txp_clk_div >> 1);
+	val |= FIELD_PREP(RK3588_DSC_SYS_CTRL__DSC_PXL_CLK_DIV, 0);
+	val |= FIELD_PREP(RK3588_DSC_SYS_CTRL__DSC_CDS_CLK_DIV,
+			  cds_clk_div >> 1);
+	val |= RK3588_DSC_SYS_CTRL__DSC_SCAN_EN;
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_SYS_CTRL, val);
+
+	delay_line_num = MIN(dsc_buf_size / dsc->slice_count /
+			     dsc->slice_chunk_size, 5);
+	val = FIELD_PREP(RK3588_DSC_INIT_DLY_NUM__DSC_INIT_DLY_NUM,
+			 htotal / cds_clk_div * delay_line_num);
+	regmap_update_bits(vop2->map, ctrl_base + RK3588_DSC_INIT_DLY_NUM,
+			   RK3588_DSC_INIT_DLY_NUM__DSC_INIT_DLY_NUM, val);
+
+	dsc_htotal = htotal * (cds_clk_div / 4);
+	dsc_hsync_len = MAX(hsync_len / 2, 8);
+	val = FIELD_PREP(RK3588_DSC_HTOTAL_HS_END__DSC_HTOTAL, dsc_htotal);
+	val |= FIELD_PREP(RK3588_DSC_HTOTAL_HS_END__DSC_HS_END, dsc_hsync_len);
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_HTOTAL_HS_END, val);
+
+	dsc_hact_st = hact_st / 2;
+	dsc_hact_end = hdisplay * (dsc->bits_per_pixel >> 4) / 24 + dsc_hact_st;
+	val = FIELD_PREP(RK3588_DSC_HACT_ST_END__DSC_HACT_END, dsc_hact_end);
+	val |= FIELD_PREP(RK3588_DSC_HACT_ST_END__DSC_HACT_ST, dsc_hact_st);
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_HACT_ST_END, val);
+
+	val = FIELD_PREP(RK3588_DSC_VTOTAL_VS_END__DSC_VTOTAL, vtotal);
+	val |= FIELD_PREP(RK3588_DSC_VTOTAL_VS_END__DSC_VS_END, vsync_len);
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_VTOTAL_VS_END, val);
+
+	val = FIELD_PREP(RK3588_DSC_VACT_ST_END__DSC_VACT_END, vact_end);
+	val |= FIELD_PREP(RK3588_DSC_VACT_ST_END__DSC_VACT_ST, vact_st);
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_VACT_ST_END, val);
+
+	vop2_writel(vop2, ctrl_base + RK3588_DSC_RST,
+		    RK3588_DSC_RST__DSC_SOFT_RST);
+
+	udelay(10);
+
+	val = RK3588_DSC_CTRL0__EN;
+	vop2_writel(vop2, dsc_base + RK3588_DSC_CTRL0, val);
+
+	vop2_crtc_load_pps(crtc, dsc_id);
+
+	val |= RK3588_DSC_CTRL0__RBIT;
+	val |= RK3588_DSC_CTRL0__FLAL;
+	val |= RK3588_DSC_CTRL0__MER;
+	val |= RK3588_DSC_CTRL0__EPL;
+	val |= FIELD_PREP(RK3588_DSC_CTRL0__NSLC, ilog2(dsc->slice_count));
+	val |= RK3588_DSC_CTRL0__SBO;
+	if (dsc->dsc_version_minor == 2)
+		val |= RK3588_DSC_CTRL0__IFEP;
+	val |= RK3588_DSC_CTRL0__PPS_UPD;
+	vop2_writel(vop2, dsc_base + RK3588_DSC_CTRL0, val);
+}
+
 static int us_to_vertical_line(struct drm_display_mode *mode, int us)
 {
 	return us * mode->clock / mode->htotal / 1000;
@@ -1642,6 +1821,7 @@ static void vop2_crtc_atomic_enable(struct drm_crtc *crtc,
 	u32 dsp_ctrl = 0;
 	int act_end;
 	u32 val, polflags;
+	u32 dsc_ctrl_base;
 	int ret;
 	struct drm_encoder *encoder;
 
@@ -1791,6 +1971,16 @@ static void vop2_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	vop2_post_config(crtc);
 
+	if (vcstate->dsc) {
+		drm_for_each_encoder_mask(encoder, crtc->dev,
+					  crtc_state->encoder_mask) {
+			struct rockchip_encoder *rkencoder = to_rockchip_encoder(encoder);
+			vcstate->dsc_id = rkencoder->crtc_endpoint_id ==
+				ROCKCHIP_VOP2_EP_MIPI0 ? 0 : 1;
+		}
+		vop2_crtc_enable_dsc(crtc, vcstate->dsc_id);
+	}
+
 	vop2_cfg_done(vp);
 
 	vop2_vp_write(vp, RK3568_VP_DSP_CTRL, dsp_ctrl);
@@ -1798,6 +1988,13 @@ static void vop2_crtc_atomic_enable(struct drm_crtc *crtc,
 	vop2_crtc_atomic_try_set_gamma(vop2, vp, crtc, crtc_state);
 
 	vop2_clk_reset(vp);
+
+	if (vcstate->dsc) {
+		dsc_ctrl_base = vcstate->dsc_id == 0 ? RK3588_DSC_SYS_CTRL_8K_BASE :
+						       RK3588_DSC_SYS_CTRL_4K_BASE;
+		vop2_writel(vop2, dsc_ctrl_base + RK3588_DSC_CFG_DONE,
+			    RK3588_DSC_CFG_DONE__CFG_DONE);
+	}
 
 	drm_crtc_vblank_on(crtc);
 
@@ -2221,6 +2418,20 @@ static irqreturn_t rk3576_vp_isr(int irq, void *data)
 	return ret;
 }
 
+static void vop2_dsc_isr(struct vop2 *vop2)
+{
+	u32 ctrl_base = RK3588_DSC_SYS_CTRL_8K_BASE;
+	u32 dsc_base = RK3588_DSC_8K_BASE;
+	u32 dsc_error_status, dsc_ecw;
+
+	dsc_error_status = vop2_readl(vop2, ctrl_base + RK3588_DSC_STATUS);
+	if (!dsc_error_status)
+		return;
+
+	dsc_ecw = vop2_readl(vop2, dsc_base + RK3588_DSC_ERS);
+	drm_err(vop2->drm, "DSC error 0x%x\n", dsc_ecw);
+}
+
 static irqreturn_t vop2_isr(int irq, void *data)
 {
 	struct vop2 *vop2 = data;
@@ -2287,6 +2498,8 @@ static irqreturn_t vop2_isr(int irq, void *data)
 			ret = IRQ_HANDLED;
 		}
 	}
+
+	vop2_dsc_isr(vop2);
 
 	pm_runtime_put(vop2->dev);
 
@@ -2628,7 +2841,7 @@ static const struct regmap_config vop2_regmap_config = {
 	.reg_bits	= 32,
 	.val_bits	= 32,
 	.reg_stride	= 4,
-	.max_register	= 0x3000,
+	.max_register	= 0x4200,
 	.name		= "vop2",
 	.volatile_table	= &vop2_volatile_table,
 	.cache_type	= REGCACHE_MAPLE,

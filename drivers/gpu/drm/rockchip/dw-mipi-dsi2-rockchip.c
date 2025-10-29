@@ -156,14 +156,15 @@ dw_mipi_dsi2_get_lane_mbps(void *priv_data, const struct drm_display_mode *mode,
 		return -ERANGE;
 	}
 
-	dsi2->lane_mbps = lane_rate_kbps / 1000;
-	*lane_mbps = dsi2->lane_mbps;
-
 	if (dsi2->phy) {
 		target_phyclk = DIV_ROUND_CLOSEST_ULL(lane_rate_kbps * lanes * 1000, bpp);
 		phy_mipi_dphy_get_default_config(target_phyclk, bpp, lanes,
 						 &dsi2->phy_opts.mipi_dphy);
 	}
+
+	dsi2->lane_mbps = DIV_ROUND_UP(dsi2->phy_opts.mipi_dphy.hs_clk_rate,
+				       USEC_PER_SEC);
+	*lane_mbps = dsi2->lane_mbps;
 
 	return 0;
 }
@@ -235,6 +236,8 @@ static void dw_mipi_dsi2_encoder_atomic_enable(struct drm_encoder *encoder,
 	}
 
 	grf_field_write(dsi2, IPI_COLOR_DEPTH, color_depth);
+	if (dsi2->dmd->dsc)
+		grf_field_write(dsi2, IPI_FORMAT, IPI_FORMAT_DSC);
 }
 
 static int
@@ -271,6 +274,7 @@ dw_mipi_dsi2_encoder_atomic_check(struct drm_encoder *encoder,
 	s->output_type = DRM_MODE_CONNECTOR_DSI;
 	s->bus_flags = info->bus_flags;
 	s->color_space = V4L2_COLORSPACE_DEFAULT;
+	s->dsc = dsi2->dmd->dsc;
 
 	return 0;
 }

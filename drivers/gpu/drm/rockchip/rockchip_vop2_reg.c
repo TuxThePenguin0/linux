@@ -1275,6 +1275,20 @@ static const struct vop2_regs_dump rk3588_regs_dump[] = {
 		.en_val = 0,
 		.en_mask = 0
 	}, {
+		.name = "DSC 8K CTRL",
+		.base = RK3588_DSC_SYS_CTRL_8K_BASE,
+		.size = 0x30,
+		.en_reg = RK3588_DSC_RST,
+		.en_val = RK3588_DSC_RST__DSC_SOFT_RST,
+		.en_mask = RK3588_DSC_RST__DSC_SOFT_RST,
+	}, {
+		.name = "DSC 4K CTRL",
+		.base = RK3588_DSC_SYS_CTRL_4K_BASE,
+		.size = 0x30,
+		.en_reg = RK3588_DSC_RST,
+		.en_val = RK3588_DSC_RST__DSC_SOFT_RST,
+		.en_mask = RK3588_DSC_RST__DSC_SOFT_RST,
+	}, {
 		.name = "OVL",
 		.base = RK3568_OVL_CTRL,
 		.size = 0x100,
@@ -1643,7 +1657,10 @@ static unsigned long rk3588_calc_cru_cfg(struct vop2_video_port *vp, int id,
 		/*
 		 * mipi pixclk == dclk_out
 		 */
-		*if_pixclk_div = 1;
+		if (vcstate->dsc)
+			*if_pixclk_div = 2;
+		else
+			*if_pixclk_div = 1;
 	} else if (vop2_output_if_is_dpi(id)) {
 		dclk_rate = v_pixclk;
 	}
