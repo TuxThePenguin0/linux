@@ -753,3 +753,4 @@ module_platform_driver(bq257xx_chg_driver);
 MODULE_DESCRIPTION("bq257xx charger driver");
 MODULE_AUTHOR("Chris Morgan <macromorgan@hotmail.com>");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:bq257xx-charger");
