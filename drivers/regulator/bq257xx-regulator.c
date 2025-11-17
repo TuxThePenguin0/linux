@@ -103,6 +103,24 @@ static const struct regulator_desc bq25703_vbus_desc = {
 	.vsel_mask = BQ25703_OTG_VOLT_MASK,
 };
 
+static const struct regulator_desc bq25713_vbus_desc = {
+	.name = "vbus",
+	.of_match = of_match_ptr("vbus"),
+	.regulators_node = of_match_ptr("regulators"),
+	.type = REGULATOR_VOLTAGE,
+	.owner = THIS_MODULE,
+	.ops = &bq25703_vbus_ops,
+	.min_uV = BQ25713_OTG_VOLT_MIN_UV,
+	.uV_step = BQ25713_OTG_VOLT_STEP_UV,
+	.n_voltages = BQ25713_OTG_VOLT_NUM_VOLT,
+	.enable_mask = BQ25703_EN_OTG_MASK,
+	.enable_reg = BQ25703_CHARGE_OPTION_3,
+	.enable_val = BQ25703_EN_OTG_MASK,
+	.disable_val = 0,
+	.vsel_reg = BQ25703_OTG_VOLT,
+	.vsel_mask = BQ25713_OTG_VOLT_MASK,
+};
+
 /* Get optional GPIO for OTG regulator enable. */
 static void bq257xx_reg_dt_parse_gpio(struct platform_device *pdev)
 {
@@ -142,6 +160,7 @@ static int bq257xx_regulator_probe(struct platform_device *pdev)
 	struct bq257xx_reg_data *pdata;
 	struct device_node *np = dev->of_node;
 	struct regulator_config cfg = {};
+	enum bq257xx_chip chip;
 
 	pdev->dev.of_node = pdev->dev.parent->of_node;
 	pdev->dev.of_node_reused = true;
@@ -151,7 +170,18 @@ static int bq257xx_regulator_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	pdata->bq = bq;
-	pdata->desc = bq25703_vbus_desc;
+
+	chip = (int)(uintptr_t)device_get_match_data(dev->parent);
+	switch (chip) {
+	case BQ25703:
+		pdata->desc = bq25703_vbus_desc;
+		break;
+	case BQ25713:
+		pdata->desc = bq25713_vbus_desc;
+		break;
+	default:
+		return dev_err_probe(dev, -EINVAL, "invalid chip %i\n", chip);
+	}
 
 	platform_set_drvdata(pdev, pdata);
 	bq257xx_reg_dt_parse_gpio(pdev);
