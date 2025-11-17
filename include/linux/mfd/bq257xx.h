@@ -107,6 +107,7 @@
 enum bq257xx_chip {
 	BQ25703,
 	BQ25713,
+	SC8886,
 };
 
 struct bq257xx_device {
