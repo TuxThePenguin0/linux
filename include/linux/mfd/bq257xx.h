@@ -98,6 +98,11 @@
 
 #define BQ25703_EN_OTG_MASK			BIT(12)
 
+enum bq257xx_chip {
+	BQ25703,
+	BQ25713,
+};
+
 struct bq257xx_device {
 	struct i2c_client *client;
 	struct regmap *regmap;
