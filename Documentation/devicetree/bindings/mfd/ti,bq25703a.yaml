@@ -14,7 +14,9 @@ allOf:
 
 properties:
   compatible:
-    const: ti,bq25703a
+    enum:
+      - ti,bq25703a
+      - ti,bq25713
 
   reg:
     const: 0x6b
