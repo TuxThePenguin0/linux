@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+
+/ {
+	dmc_opp_table: opp-table-dmc {
+		compatible = "operating-points-v2";
+
+		opp-528000000 {
+			opp-hz = /bits/ 64 <528000000>;
+			opp-microvolt = <675000 675000 875000>,
+					<725000 725000 800000>;
+		};
+
+		opp-1068000000 {
+			opp-hz = /bits/ 64 <1068000000>;
+			opp-microvolt = <725000 725000 875000>,
+					<737500 737500 800000>;
+		};
+
+		opp-1560000000 {
+			opp-hz = /bits/ 64 <1560000000>;
+			opp-microvolt = <800000 800000 875000>,
+					<750000 750000 800000>;
+		};
+
+		opp-2112000000 {
+			opp-hz = /bits/ 64 <2112000000>;
+			opp-microvolt = <875000 875000 875000>,
+					<750000 750000 800000>;
+		};
+	};
+};
+
+&dmc {
+	operating-points-v2 = <&dmc_opp_table>;
+};

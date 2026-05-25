@@ -388,6 +388,16 @@
 		};
 	};
 
+	dmc: memory-controller {
+		compatible = "rockchip,rk3588-dmc";
+		clocks = <&scmi_clk SCMI_CLK_DDR>;
+		clock-names = "dmc_clk";
+		devfreq-events = <&dfi>;
+		interrupts = <GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH 0>;
+		interrupt-names = "complete";
+		status = "disabled";
+	};
+
 	pmu-a55 {
 		compatible = "arm,cortex-a55-pmu";
 		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_HIGH &ppi_partition0>;
