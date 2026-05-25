@@ -9,7 +9,7 @@
 #include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/slab.h>
-#include <soc/rockchip/rockchip_sip.h>
+#include <soc/rockchip/rk3399_sip.h>
 #include "clk.h"
 
 struct rockchip_ddrclk {

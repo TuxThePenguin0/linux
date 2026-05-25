@@ -24,7 +24,7 @@
 #include <soc/rockchip/pm_domains.h>
 #include <soc/rockchip/rockchip_grf.h>
 #include <soc/rockchip/rk3399_grf.h>
-#include <soc/rockchip/rockchip_sip.h>
+#include <soc/rockchip/rk3399_sip.h>
 
 #define NS_TO_CYCLE(NS, MHz)				(((NS) * (MHz)) / NSEC_PER_USEC)
 
