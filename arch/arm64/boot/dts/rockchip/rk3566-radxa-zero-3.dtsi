@@ -105,6 +105,11 @@
 	cpu-supply = <&vdd_cpu>;
 };
 
+&dmc {
+	center-supply = <&vdd_logic>;
+	status = "okay";
+};
+
 &gpio0 {
 	gpio-line-names =
 		/* GPIO0_A0 - A7 */
