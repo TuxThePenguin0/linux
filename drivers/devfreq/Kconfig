@@ -152,6 +152,19 @@ config ARM_RK3399_DMC_DEVFREQ
 	  It sets the frequency for the memory controller and reads the usage counts
 	  from hardware.
 
+config ARM_RK35_DMC_DEVFREQ
+	tristate "ARM RK35xx DMC DEVFREQ Driver"
+	depends on (ARCH_ROCKCHIP && HAVE_ARM_SMCCC) || \
+		(COMPILE_TEST && HAVE_ARM_SMCCC)
+	select DEVFREQ_EVENT_ROCKCHIP_DFI
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	select PM_DEVFREQ_EVENT
+	help
+	  This adds the DEVFREQ driver for the DMC (Dynamic Memory Controller)
+	  found in RK35 generation Rockchip SoCs such as RK3568 and RK3588.
+	  It sets the frequency for the memory controller and reads the usage
+	  counts from hardware.
+
 config ARM_SUN8I_A33_MBUS_DEVFREQ
 	tristate "sun8i/sun50i MBUS DEVFREQ Driver"
 	depends on ARCH_SUNXI || COMPILE_TEST
