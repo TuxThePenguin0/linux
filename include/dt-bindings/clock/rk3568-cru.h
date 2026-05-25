@@ -488,6 +488,7 @@
 #define SCMI_CLK_CPU		0
 #define SCMI_CLK_GPU		1
 #define SCMI_CLK_NPU		2
+#define SCMI_CLK_DDR		3
 
 /* pmu soft-reset indices */
 /* pmucru_softrst_con0 */
